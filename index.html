@@ -8,7 +8,6 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f9f9f7; color: #1a1a1a; padding: 2rem; min-height: 100vh; }
   h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; }
-  .subtitle { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
   .progress-bar-wrap { background: #e8e8e4; border-radius: 99px; height: 6px; margin-bottom: 0.5rem; overflow: hidden; }
   .progress-bar-fill { height: 100%; border-radius: 99px; background: #1a1a1a; transition: width 0.4s ease; }
   .progress-label { font-size: 12px; color: #999; margin-bottom: 1.25rem; }
@@ -91,7 +90,6 @@
 </head>
 <body>
 <h1>Vibe Code Projects</h1>
-<p class="subtitle" id="subtitle">103 ideas — track your builds</p>
 <div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-fill" style="width:0%"></div></div>
 <p class="progress-label" id="prog-label">0 of 103 built</p>
 <div class="search-row">
@@ -319,12 +317,6 @@ function isCustomProject(n) {
 function nextCustomId() {
   const nums = getAllProjects().map((p) => p.n);
   return Math.max(103, ...nums) + 1;
-}
-function updateSubtitle() {
-  const total = getAllProjects().length;
-  const customCount = customProjects.length;
-  const extra = customCount ? " (" + customCount + " yours)" : "";
-  document.getElementById("subtitle").textContent = total + " ideas" + extra + " — track your builds";
 }
 function ensureState(n) {
   if (!state[n]) state[n] = { status: "notstarted", starred: false, url: "", notes: "", title: "", desc: "", tag: "", diff: "" };
@@ -571,7 +563,6 @@ function deleteCustomProject() {
   saveCustomProjects();
   saveState(state);
   closeModal();
-  updateSubtitle();
   renderFilters();
   render();
 }
@@ -590,7 +581,6 @@ function saveModal() {
     customProjects.push({ n, custom: true, ...fields });
     saveCustomProjects();
     closeModal();
-    updateSubtitle();
     renderFilters();
     render();
     return;
@@ -614,7 +604,6 @@ function saveModal() {
     saveState(state);
   }
   closeModal();
-  updateSubtitle();
   renderFilters();
   render();
 }
@@ -622,7 +611,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.getElementById("modal-overlay").classList.contains("open")) closeModal();
 });
 fillSelectOptions();
-updateSubtitle();
 renderFilters();
 render();
 </script>
