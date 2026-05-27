@@ -440,9 +440,9 @@ function renderFilters() {
   document.getElementById("status-filters").innerHTML =
     statusOpts.map((s) => '<span class="chip ' + (activeStatus === s ? "active" : "") + '" onclick="setStatusFilter(\'' + s + '\')">' + (statusLabels[s] || s) + "</span>").join("");
 }
-function setCatFilter(value) { activeCat = value; renderFilters(); render(); }
-function setDiffFilter(value) { activeDiff = value; renderFilters(); render(); }
-function setStatusFilter(value) { activeStatus = value; renderFilters(); render(); }
+function setCatFilter(value) { activeCat = activeCat === value ? null : value; renderFilters(); render(); }
+function setDiffFilter(value) { activeDiff = activeDiff === value ? null : value; renderFilters(); render(); }
+function setStatusFilter(value) { activeStatus = activeStatus === value ? "all" : value; renderFilters(); render(); }
 function clearFilters() {
   activeCat = null;
   activeDiff = null;
