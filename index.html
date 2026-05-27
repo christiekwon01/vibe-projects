@@ -18,6 +18,13 @@
   .search-row input:focus, .search-row select:focus { border-color: #999; outline: none; }
   .search-row button { cursor: pointer; }
   .search-row button:hover { background: #f0f0ee; }
+  .add-btn { background: #1a1a1a; color: #fff; border-color: #1a1a1a; font-weight: 500; white-space: nowrap; }
+  .add-btn:hover { background: #333; }
+  .card.custom .card-num { color: #0c447c; }
+  .tag-custom { background: #f1efe8; color: #444441; }
+  .btn.danger { color: #8b2e2e; border-color: #e0b4b4; }
+  .btn.danger:hover { background: #fdf5f5; }
+  #modal-delete { display: none; margin-right: auto; }
   .filter-label { font-size: 11px; color: #aaa; margin-bottom: 4px; margin-top: 0.75rem; }
   .filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0.25rem; }
   .chip { font-size: 12px; padding: 4px 12px; border-radius: 20px; border: 0.5px solid #ccc; background: #fff; color: #666; cursor: pointer; transition: all 0.15s; user-select: none; }
@@ -84,7 +91,7 @@
 </head>
 <body>
 <h1>Vibe Code Projects</h1>
-<p class="subtitle">103 ideas — track your builds</p>
+<p class="subtitle" id="subtitle">103 ideas — track your builds</p>
 <div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-fill" style="width:0%"></div></div>
 <p class="progress-label" id="prog-label">0 of 103 built</p>
 <div class="search-row">
@@ -96,6 +103,7 @@
     <option value="status">sort: status</option>
   </select>
   <button type="button" onclick="clearFilters()">clear filters</button>
+  <button type="button" class="add-btn" onclick="openAddModal()">+ add</button>
 </div>
 <div class="filter-label">category</div>
 <div class="filter-row" id="cat-filters"></div>
@@ -158,8 +166,9 @@
       </div>
     </div>
     <div class="modal-foot">
+      <button class="btn danger" type="button" id="modal-delete" onclick="deleteCustomProject()">delete</button>
       <button class="btn" type="button" onclick="closeModal()">cancel</button>
-      <button class="btn primary" type="button" onclick="saveModal()">save changes</button>
+      <button class="btn primary" type="button" id="modal-save" onclick="saveModal()">save changes</button>
     </div>
   </div>
 </div>
@@ -170,7 +179,7 @@ const diffLabels = { quick:"quick build", weekend:"weekend project", project:"bi
 const statusLabels = { all:"all", notstarted:"not started", inprogress:"in progress", done:"done", starred:"next up / starred" };
 const statusOrder = { inprogress: 0, notstarted: 1, done: 2 };
 
-const projects = [
+const baseProjects = [
   {n:1,title:"Internet Bedroom",desc:"A personal digital world that feels like entering your mind/space",tag:"emotional",diff:"project"},
   {n:2,title:"If My Life Was A Movie",desc:"Your life visualized as a film with soundtrack, scenes, narration, arcs",tag:"emotional",diff:"project"},
   {n:3,title:"Personal Mythology",desc:"Identity and life tracked through eras, archetypes, transformations",tag:"emotional",diff:"project"},
@@ -277,17 +286,45 @@ const projects = [
 ];
 
 const STORAGE_KEY = "vibe-projects-state";
+const CUSTOM_STORAGE_KEY = "vibe-projects-custom";
 let state = loadState();
+let customProjects = loadCustomProjects();
 let activeCat = null;
 let activeDiff = null;
 let activeStatus = "all";
 let editingProject = null;
+let isAdding = false;
 
 function loadState() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) { return {}; }
 }
 function saveState(nextState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+}
+function loadCustomProjects() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_STORAGE_KEY)) || []; } catch (e) { return []; }
+}
+function saveCustomProjects() {
+  localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(customProjects));
+}
+function getAllProjects() {
+  return baseProjects.concat(customProjects);
+}
+function findProject(n) {
+  return getAllProjects().find((p) => p.n === n);
+}
+function isCustomProject(n) {
+  return customProjects.some((p) => p.n === n);
+}
+function nextCustomId() {
+  const nums = getAllProjects().map((p) => p.n);
+  return Math.max(103, ...nums) + 1;
+}
+function updateSubtitle() {
+  const total = getAllProjects().length;
+  const customCount = customProjects.length;
+  const extra = customCount ? " (" + customCount + " yours)" : "";
+  document.getElementById("subtitle").textContent = total + " ideas" + extra + " — track your builds";
 }
 function ensureState(n) {
   if (!state[n]) state[n] = { status: "notstarted", starred: false, url: "", notes: "", title: "", desc: "", tag: "", diff: "" };
@@ -297,6 +334,15 @@ function getProjectState(n) {
   return ensureState(n);
 }
 function getProjectView(p) {
+  if (p.custom) {
+    return {
+      ...p,
+      status: p.status || "notstarted",
+      starred: !!p.starred,
+      url: p.url || "",
+      notes: p.notes || ""
+    };
+  }
   const ps = getProjectState(p.n);
   return {
     ...p,
@@ -308,6 +354,18 @@ function getProjectView(p) {
     starred: !!ps.starred,
     url: ps.url || "",
     notes: ps.notes || ""
+  };
+}
+function readModalFields() {
+  return {
+    title: document.getElementById("m-title").value.trim(),
+    desc: document.getElementById("m-desc").value.trim(),
+    status: document.getElementById("m-status").value,
+    starred: document.getElementById("m-starred").value === "true",
+    tag: document.getElementById("m-tag").value,
+    diff: document.getElementById("m-diff").value,
+    url: document.getElementById("m-url").value.trim(),
+    notes: document.getElementById("m-notes").value.trim()
   };
 }
 function safe(txt) {
@@ -336,23 +394,36 @@ function setProjectField(n, field, value) {
   saveState(state);
 }
 function toggleStar(n) {
-  const ps = getProjectState(n);
-  setProjectField(n, "starred", !ps.starred);
+  if (isCustomProject(n)) {
+    const cp = customProjects.find((p) => p.n === n);
+    cp.starred = !cp.starred;
+    saveCustomProjects();
+  } else {
+    const ps = getProjectState(n);
+    setProjectField(n, "starred", !ps.starred);
+  }
   render();
 }
 function setStatus(n, value) {
-  setProjectField(n, "status", value);
+  if (isCustomProject(n)) {
+    const cp = customProjects.find((p) => p.n === n);
+    cp.status = value;
+    saveCustomProjects();
+  } else {
+    setProjectField(n, "status", value);
+  }
   render();
 }
 function updateProgress() {
-  const done = projects.filter((p) => getProjectState(p.n).status === "done").length;
-  const pct = Math.round((done / projects.length) * 100);
+  const all = getAllProjects().map(getProjectView);
+  const done = all.filter((p) => p.status === "done").length;
+  const pct = all.length ? Math.round((done / all.length) * 100) : 0;
   document.getElementById("prog-fill").style.width = pct + "%";
-  document.getElementById("prog-label").textContent = done + " of " + projects.length + " built";
+  document.getElementById("prog-label").textContent = done + " of " + all.length + " built";
 }
 function renderFilters() {
   const catCounts = {}, diffCounts = {};
-  projects.forEach((p) => {
+  getAllProjects().forEach((p) => {
     const pv = getProjectView(p);
     catCounts[pv.tag] = (catCounts[pv.tag] || 0) + 1;
     diffCounts[pv.diff] = (diffCounts[pv.diff] || 0) + 1;
@@ -392,7 +463,7 @@ function getSorted(list) {
 }
 function render() {
   const q = document.getElementById("search").value.toLowerCase().trim();
-  const filtered = projects
+  const filtered = getAllProjects()
     .map(getProjectView)
     .filter((p) => {
       const matchesCat = !activeCat || p.tag === activeCat;
@@ -413,9 +484,9 @@ function render() {
   }
   grid.innerHTML = sorted.map((p) => {
     const notesHint = !p.url && p.notes ? "notes added" : "";
-    return `<div class="card${p.status==="done"?" done":""}${p.starred?" starred":""}" onclick="openModal(${p.n})">
+    return `<div class="card${p.custom?" custom":""}${p.status==="done"?" done":""}${p.starred?" starred":""}" onclick="openModal(${p.n})">
       <div class="card-top">
-        <span class="card-num">#${p.n}</span>
+        <span class="card-num">${p.custom ? "yours" : "#" + p.n}</span>
         <span class="card-title">${safe(p.title)}</span>
       </div>
       <p class="card-desc">${safe(p.desc)}</p>
@@ -430,6 +501,7 @@ function render() {
       ${cardUrlHtml(p.url)}
       <div class="card-meta">${safe(notesHint)}</div>
       <div class="tags">
+        ${p.custom ? '<span class="tag tag-custom">your idea</span>' : ""}
         <span class="tag tag-${p.tag}">${safe(tagLabels[p.tag] || p.tag)}</span>
         <span class="tag tag-${p.diff}">${safe(diffLabels[p.diff] || p.diff)}</span>
       </div>
@@ -443,12 +515,37 @@ function fillSelectOptions() {
   tagSelect.innerHTML = Object.keys(tagLabels).map((k) => `<option value="${k}">${tagLabels[k]}</option>`).join("");
   diffSelect.innerHTML = Object.keys(diffLabels).map((k) => `<option value="${k}">${diffLabels[k]}</option>`).join("");
 }
+function setModalMode(mode) {
+  const isAdd = mode === "add";
+  const isCustomEdit = mode === "custom";
+  document.getElementById("modal-delete").style.display = isCustomEdit ? "inline-block" : "none";
+  document.getElementById("modal-save").textContent = isAdd ? "add project" : "save changes";
+}
+function openAddModal() {
+  isAdding = true;
+  editingProject = null;
+  setModalMode("add");
+  document.getElementById("modal-title").textContent = "Add project";
+  document.getElementById("m-title").value = "";
+  document.getElementById("m-desc").value = "";
+  document.getElementById("m-status").value = "notstarted";
+  document.getElementById("m-starred").value = "false";
+  document.getElementById("m-tag").value = "practical";
+  document.getElementById("m-diff").value = "quick";
+  document.getElementById("m-url").value = "";
+  document.getElementById("m-notes").value = "";
+  document.getElementById("modal-overlay").classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.getElementById("m-title").focus();
+}
 function openModal(n) {
-  const base = projects.find((p) => p.n === n);
+  const base = findProject(n);
   if (!base) return;
+  isAdding = false;
   const p = getProjectView(base);
   editingProject = n;
-  document.getElementById("modal-title").textContent = "Edit #" + p.n + " - " + p.title;
+  setModalMode(p.custom ? "custom" : "edit");
+  document.getElementById("modal-title").textContent = (p.custom ? "Edit yours" : "Edit #" + p.n) + " - " + p.title;
   document.getElementById("m-title").value = p.title;
   document.getElementById("m-desc").value = p.desc;
   document.getElementById("m-status").value = p.status;
@@ -462,35 +559,70 @@ function openModal(n) {
 }
 function closeModal() {
   editingProject = null;
+  isAdding = false;
   document.getElementById("modal-overlay").classList.remove("open");
   document.body.style.overflow = "";
+}
+function deleteCustomProject() {
+  if (editingProject == null || !isCustomProject(editingProject)) return;
+  if (!confirm("Delete this project?")) return;
+  customProjects = customProjects.filter((p) => p.n !== editingProject);
+  delete state[editingProject];
+  saveCustomProjects();
+  saveState(state);
+  closeModal();
+  updateSubtitle();
+  renderFilters();
+  render();
 }
 function handleOverlayClick(event) {
   if (event.target.id === "modal-overlay") closeModal();
 }
 function saveModal() {
+  const fields = readModalFields();
+  if (!fields.title) {
+    alert("Please add a title.");
+    document.getElementById("m-title").focus();
+    return;
+  }
+  if (isAdding) {
+    const n = nextCustomId();
+    customProjects.push({ n, custom: true, ...fields });
+    saveCustomProjects();
+    closeModal();
+    updateSubtitle();
+    renderFilters();
+    render();
+    return;
+  }
   if (editingProject == null) return;
-  const base = projects.find((p) => p.n === editingProject);
-  const s = ensureState(editingProject);
-  const title = document.getElementById("m-title").value.trim();
-  const desc = document.getElementById("m-desc").value.trim();
-  s.title = title !== base.title ? title : "";
-  s.desc = desc !== base.desc ? desc : "";
-  s.status = document.getElementById("m-status").value;
-  s.starred = document.getElementById("m-starred").value === "true";
-  s.tag = document.getElementById("m-tag").value;
-  s.diff = document.getElementById("m-diff").value;
-  s.url = document.getElementById("m-url").value.trim();
-  s.notes = document.getElementById("m-notes").value.trim();
-  saveState(state);
+  if (isCustomProject(editingProject)) {
+    const cp = customProjects.find((p) => p.n === editingProject);
+    Object.assign(cp, fields);
+    saveCustomProjects();
+  } else {
+    const base = findProject(editingProject);
+    const s = ensureState(editingProject);
+    s.title = fields.title !== base.title ? fields.title : "";
+    s.desc = fields.desc !== base.desc ? fields.desc : "";
+    s.status = fields.status;
+    s.starred = fields.starred;
+    s.tag = fields.tag;
+    s.diff = fields.diff;
+    s.url = fields.url;
+    s.notes = fields.notes;
+    saveState(state);
+  }
+  closeModal();
+  updateSubtitle();
   renderFilters();
   render();
-  closeModal();
 }
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.getElementById("modal-overlay").classList.contains("open")) closeModal();
 });
 fillSelectOptions();
+updateSubtitle();
 renderFilters();
 render();
 </script>
