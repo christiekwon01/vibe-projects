@@ -35,6 +35,8 @@
   .card-desc { font-size: 12px; color: #777; line-height: 1.5; margin-bottom: 10px; }
   .card-actions { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
   .card-meta { font-size: 11px; color: #9a9a9a; margin-bottom: 8px; min-height: 14px; }
+  .card-url { display: block; font-size: 11px; color: #0c447c; text-decoration: none; margin-bottom: 8px; line-height: 1.4; word-break: break-all; }
+  .card-url:hover { text-decoration: underline; }
   .star-btn { background: none; border: 0.5px solid #ddd; border-radius: 6px; padding: 3px 7px; font-size: 13px; cursor: pointer; color: #aaa; transition: all 0.15s; line-height: 1; }
   .star-btn:hover { border-color: #f0c040; color: #f0c040; }
   .star-btn.on { border-color: #f0c040; color: #f0c040; background: #fffbee; }
@@ -311,6 +313,23 @@ function getProjectView(p) {
 function safe(txt) {
   return String(txt || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
+function urlHref(raw) {
+  const url = String(raw || "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return "https://" + url;
+}
+function urlLabel(raw) {
+  const url = String(raw || "").trim();
+  if (!url) return "";
+  return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+function cardUrlHtml(url) {
+  if (!url) return "";
+  const href = safe(urlHref(url));
+  const label = safe(urlLabel(url));
+  return `<a class="card-url" href="${href}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="${href}">${label}</a>`;
+}
 function setProjectField(n, field, value) {
   const ps = ensureState(n);
   ps[field] = value;
@@ -393,7 +412,7 @@ function render() {
     return;
   }
   grid.innerHTML = sorted.map((p) => {
-    const updated = p.url ? ("link set") : (p.notes ? "notes added" : "");
+    const notesHint = !p.url && p.notes ? "notes added" : "";
     return `<div class="card${p.status==="done"?" done":""}${p.starred?" starred":""}" onclick="openModal(${p.n})">
       <div class="card-top">
         <span class="card-num">#${p.n}</span>
@@ -408,7 +427,8 @@ function render() {
           <option value="done"${p.status==="done"?" selected":""}>done</option>
         </select>
       </div>
-      <div class="card-meta">${safe(updated)}</div>
+      ${cardUrlHtml(p.url)}
+      <div class="card-meta">${safe(notesHint)}</div>
       <div class="tags">
         <span class="tag tag-${p.tag}">${safe(tagLabels[p.tag] || p.tag)}</span>
         <span class="tag tag-${p.diff}">${safe(diffLabels[p.diff] || p.diff)}</span>
